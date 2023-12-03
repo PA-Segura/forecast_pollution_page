@@ -122,7 +122,7 @@ def calculate_color(value):
         red = 255
         green = int(255 * ((1 - value) / 0.5))
 
-    return f'rgba({red}, {green}, 0, 0.75)'
+    return f'rgba({red}, {green}, 0, {0.5 + (0.5*(value))})'
 
 
 ############################################################

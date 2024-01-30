@@ -147,7 +147,8 @@ def probability_2pass_threshold(forecast_level, mu, sigma, thresholdX):
     difference_to_threshold = thresholdX - forecast_level
 
     # Calcular la probabilidad de que la desviación sea mayor o igual a esa diferencia
-    probability = 1 - norm.cdf(difference_to_threshold/1.96, mu, sigma)
+    # 0.999 para no tener probabilidades del 100%..
+    probability = 0.999 - norm.cdf(difference_to_threshold/1.96, mu, sigma) 
 
     # Convertir a porcentaje
     #probability_percent = probability

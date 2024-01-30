@@ -1,3 +1,3 @@
-bind = "0.0.0.0:8050"
-workers = 4
+bind = "0.0.0.0:8888"
+workers = 8
 timeout = 120

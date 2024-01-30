@@ -8,41 +8,75 @@ from dash.exceptions import PreventUpdate
 import plotly.graph_objects as go
 from forecast_utils import getDataFrameFromDateRange, calculate_color, probability_2pass_threshold, moving_average_probabilities
 import time
+from urllib.parse import parse_qs, urlparse
 
 debug_version = False
-
 stations_dict = {
-    'UIZ': 'UIZ - UAM Iztapalapa',
-    'AJU': 'AJU - Ajusco',
-    'ATI': 'ATI - Atizapan',
-    'CUA': 'CUA - Cuajimalpa',
-    'SFE': 'SFE - Santa Fe',
-    'SAG': 'SAG - San Agustín',
-    'CUT': 'CUT - Cuautitlán',
-    'PED': 'PED - Pedregal',
-    'TAH': 'TAH - Tlahuac',
-    'GAM': 'GAM - Gustavo A. Madero',
-    'IZT': 'IZT - Iztacalco',
-    'CCA': 'CCA - Instituto de Ciencias de la Atmósfera y Cambio Climático',
-    'HGM': 'HGM - Hospital General de México',
-    'LPR': 'LPR - La Presa',
-    'MGH': 'MGH - Miguel Hidalgo',
-    'CAM': 'CAM - Camarones',
-    'FAC': 'FAC - FES Acatlán',
     'TLA': 'TLA - Tlalnepantla',
-    'MER': 'MER - Merced',
-    'XAL': 'XAL - Xalostoc',
     'LLA': 'LLA - Los Laureles',
+    'XAL': 'XAL - Xalostoc',
+    'MER': 'MER - Merced',
+    'SAG': 'SAG - San Agustín',
+    'IZT': 'IZT - Iztacalco',
+    'UIZ': 'UIZ - UAM Iztapalapa',
+    'MGH': 'MGH - Miguel Hidalgo',
+    'HGM': 'HGM - Hospital General de México',
+    'FAC': 'FAC - FES Acatlán',
+    'VIF': 'VIF - Villa de las Flores',
+    'CAM': 'CAM - Camarones',
+    'ATI': 'ATI - Atizapan',
+    'CCA': 'CCA - Instituto de Ciencias de la Atmósfera y Cambio Climático',
     'TLI': 'TLI - Tultitlán',
-    'UAX': 'UAX - UAM Xochimilco',
-    'BJU': 'BJU - Benito Juárez',
-    'MPA': 'MPA - Milpa Alta',
+    'PED': 'PED - Pedregal',
+    'CUT': 'CUT - Cuautitlán',
     'MON': 'MON - Montecillo',
+    'CUA': 'CUA - Cuajimalpa',
+    'BJU': 'BJU - Benito Juárez',
     'NEZ': 'NEZ - Nezahualcóyotl',
-    'INN': 'INN - Investigaciones Nucleares',
+    'UAX': 'UAX - UAM Xochimilco',
     'AJM': 'AJM - Ajusco Medio',
-    'VIF': 'VIF - Villa de las Flores'
+    'LPR': 'LPR - La Presa',
+    'GAM': 'GAM - Gustavo A. Madero',
+    'TAH': 'TAH - Tlahuac',
+    'MPA': 'MPA - Milpa Alta',
+    'AJU': 'AJU - Ajusco',
+    'SFE': 'SFE - Santa Fe',
+    'INN': 'INN - Investigaciones Nucleares',
 }
+
+# stations_dict = {
+#     'UIZ': 'UIZ - UAM Iztapalapa',
+#     'AJU': 'AJU - Ajusco',
+#     'ATI': 'ATI - Atizapan',
+#     'CUA': 'CUA - Cuajimalpa',
+#     'SAG': 'SAG - San Agustín',
+#     'CUT': 'CUT - Cuautitlán',
+#     'PED': 'PED - Pedregal',
+#     'TAH': 'TAH - Tlahuac',
+#     'GAM': 'GAM - Gustavo A. Madero',
+#     'IZT': 'IZT - Iztacalco',
+#     'CCA': 'CCA - Instituto de Ciencias de la Atmósfera y Cambio Climático',
+#     'HGM': 'HGM - Hospital General de México',
+#     'LPR': 'LPR - La Presa',
+#     'MGH': 'MGH - Miguel Hidalgo',
+#     'CAM': 'CAM - Camarones',
+#     'FAC': 'FAC - FES Acatlán',
+#     'TLA': 'TLA - Tlalnepantla',
+#     'MER': 'MER - Merced',
+#     'XAL': 'XAL - Xalostoc',
+#     'LLA': 'LLA - Los Laureles',
+#     'TLI': 'TLI - Tultitlán',
+#     'UAX': 'UAX - UAM Xochimilco',
+#     'BJU': 'BJU - Benito Juárez',
+#     'MPA': 'MPA - Milpa Alta',
+#     'MON': 'MON - Montecillo',
+#     'NEZ': 'NEZ - Nezahualcóyotl',
+#     'INN': 'INN - Investigaciones Nucleares',
+#     'AJM': 'AJM - Ajusco Medio',
+#     'VIF': 'VIF - Villa de las Flores'
+# }
+# #    'SFE': 'SFE - Santa Fe',
+#     'INN': 'INN - Investigaciones Nucleares',
 
 dropdown_options = [{'label': name, 'value': code} for code, name in stations_dict.items()]
 
@@ -103,25 +137,32 @@ def get_mu_sigma(hour, station, value, df, intervals):
 
 
 def calculate_prediction_intervals(df_pred, hour_column_prefix, station, df_results, intervals):
-    prediction_intervals = []
+    prediction_intervals_plus = []
+    prediction_intervals_minus = []
 
     for i in range(1, 25):
         # Obtener el valor de predicción para la hora específica
-        # df_pred.loc[0, f'{hour_column_prefix}{str(i).zfill(2)}']
         value_pred = df_pred[f'{hour_column_prefix}{str(i).zfill(2)}']
+
         # Obtener mu y sigma para el valor predicho, la estación y la hora
         mu, sigma = get_mu_sigma(i, station, value_pred, df_results, intervals)
 
-        if sigma is not None:
-            # Calcular el intervalo de predicción como sigma * 1.96
-            prediction_interval = sigma * 1.96
+        # Verificar que mu y sigma no sean None
+        if sigma is not None and mu is not None:
+            # Calcular los intervalos de predicción superior e inferior
+            # Se usa signo (-) porque errores es (predicted-observed) Supon observed 150 ppb, y pronostico 120, errore es -30, entonces por eso el p_interval tiene signo (-)
+            prediction_interval_plus = mu - (sigma * 1.96)
+            prediction_interval_minus = mu + (sigma * 1.96)
         else:
             # En caso de que no se encuentre un intervalo válido, podrías querer añadir un valor por defecto o None
-            prediction_interval = None
+            prediction_interval_plus = 0  #np.nan
+            prediction_interval_minus = 0  #np.nan
 
-        prediction_intervals.append(prediction_interval)
-
-    return prediction_intervals
+        prediction_intervals_plus.append(prediction_interval_plus)
+        prediction_intervals_minus.append(prediction_interval_minus)
+    print(prediction_intervals_plus, prediction_intervals_minus)
+    # time.sleep(5)
+    return prediction_intervals_plus, prediction_intervals_minus
 
 
 def calculate_probabilities(df_pred_bd):
@@ -135,45 +176,93 @@ def calculate_probabilities(df_pred_bd):
     timestamps_pred = [df_pred_bd['fecha'][0] + pd.Timedelta(hours=i) for i in range(1, 25)]
     values_pred = df_pred_bd.loc[0, 'hour_p01':'hour_p24']
 
-    # Caso 1: Probabilidad de superar Umbral de 150 ppb en las siguientes 24 horas
-    forecast_level = values_pred.max()
-
-    mu, sigma = 5.08, 18.03  # Para max_err_24h
-    thresholdC1 = 150
-    probabilities.append(probability_2pass_threshold(forecast_level, mu, sigma, thresholdC1))
-
-    # Caso 2: Probabilidad de superar "Media > 50 ppb/8hrs en siguientes 24 horas"
+    # Caso 1: Probabilidad de superar "Más de 50 ppb en 8hrs en siguientes 24 horas"
     mu, sigma = -0.43, 6.11  # Para mean_err_24h
     thresholdC2 = 50
     mean8probs = moving_average_probabilities(values_pred, 8, mu, sigma, thresholdC2)
     probabilities.append(max(mean8probs))
 
-    # Caso 3: Probabilidad de superar "Umbral de 90 ppb en las siguientes 24 horas"
+    # Caso 2: Probabilidad de superar "Umbral de 90 ppb en las siguientes 24 horas"
+    forecast_level = values_pred.max()
+    mu, sigma = 5.08, 18.03  # Para max_err_24h
     thresholdC3 = 90
     probabilities.append(probability_2pass_threshold(forecast_level, mu, sigma, thresholdC3))
 
-    # Caso 4: Probabilidad de superar "Umbral de 120 ppb en las siguientes 24 horas"
+    # Caso 3: Probabilidad de superar "Umbral de 120 ppb en las siguientes 24 horas"
+    forecast_level = values_pred.max()
+    mu, sigma = 5.08, 18.03  # Para max_err_24h
     thresholdC4 = 120
     probabilities.append(probability_2pass_threshold(forecast_level, mu, sigma, thresholdC4))
+
+    # Caso 4: Probabilidad de superar Umbral de 150 ppb en las siguientes 24 horas
+    forecast_level = values_pred.max()
+    mu, sigma = 5.08, 18.03  # Para max_err_24h
+    thresholdC1 = 150
+    probabilities.append(probability_2pass_threshold(forecast_level, mu, sigma, thresholdC1))
+
 
     return probabilities
 
 
-# # Definir una función para generar el layout de la aplicación
-def generate_layout(id_est='MER'):
+def db_query_last_predhour(id_est, time_now):
+    columnas_hp = ', '.join([f'hour_p{str(i).zfill(2)}' for i in range(1, 25)])
 
-    # Obtener la fecha y hora actual
-    now = datetime.now()
+    # Asegurarse de que time_now es un objeto datetime
+    if not isinstance(time_now, datetime):
+        # Convierte time_now a datetime si es necesario
+        time_now = datetime.strptime(time_now, '%Y-%m-%d %H:%M:%S')
 
-    # Redondear a la hora en punto más cercana
-    now = now.replace(minute=0, second=0, microsecond=0)
-    # now = now - timedelta(hours=329 * 24 + 12 )  # para que sea año 2019 en tests.
-    now = datetime(2023, 3, 14, 22, 0, 0)
+    # Calcular la hora de inicio restando 24 horas
+    start_time = time_now - timedelta(hours=24)
+    start_time_str = start_time.strftime('%Y-%m-%d %H:%M:%S')
+
+    # Consulta para encontrar el último pronóstico disponible en las últimas 5 horas
+    consulta_pred = f"""SELECT fecha, id_est, {columnas_hp} FROM forecast_otres 
+                        WHERE fecha BETWEEN '{start_time_str}' AND '{time_now.strftime('%Y-%m-%d %H:%M:%S')}'
+                          AND id_tipo_pronostico = 6 AND id_est = '{id_est}'
+                        ORDER BY fecha DESC
+                        LIMIT 1;"""
+
+    # Obtener los datos con la consulta SQL
+    df_pred_bd = getDataFrameFromDateRange(consulta_pred)
+    print('HERE -------')
+    print(df_pred_bd)
+    # time.sleep(10)
+    # Obtener la fecha y hora del último pronóstico
+    last_pred_datetime = df_pred_bd.iloc[0]['fecha'] if not df_pred_bd.empty else time_now
+
+    return df_pred_bd, last_pred_datetime
+
+
+def generate_layout(id_est='MER', fecha=None):
+    if id_est == None:
+        id_est = 'MER'
+
+    if fecha:
+        try:
+            # Intenta convertir la cadena de fecha a un objeto datetime
+            now = datetime.strptime(fecha, '%Y-%m-%dT%H')
+            print(now)
+            _, now = db_query_last_predhour(id_est, now) #datetime.now())
+            print(now)
+            # time.sleep(10)
+            # now = datetime.strptime(fecha, '%Y-%m-%dT%H') #:%M')
+        except ValueError:
+            # Si hay un error en el formato de la fecha, utiliza la fecha y hora actual
+            now = datetime.now()
+            now = now.replace(minute=0, second=0, microsecond=0)
+    else:
+        # Si no se proporciona una fecha, obtenemos la fecha del último pronóstico disponible
+        _, now = db_query_last_predhour(id_est, datetime.now())
+        print(now)
+        # time.sleep(5)
+        # _, now = db_query_predhours(id_est, datetime.now())
+
     now_str = now.strftime('%Y-%m-%d %H:%M:%S')
 
-    # Definir una función para obtener datos de la base de datos:
 
-    # id_est = 'MER'
+    # Definir una función para obtener datos de la base de datos:
+    # # id_est = 'MER'
     num_hours_past = 24
 
     # Retroceder 12 horas para obtener la hora de inicio
@@ -219,19 +308,22 @@ def generate_layout(id_est='MER'):
         color="black"
     )
 
-    time_series_fig.add_trace(
-        go.Scatter(x=last_12_hours_data['fecha'],
-                   y=last_12_hours_data['val'],
-                   mode='lines+markers',
-                   name=f'<b>Pasadas {num_hours_past} horas</b>',
-                   textfont=style_traces))
 
     if not last_12_hours_data.empty:
         last_obs_time = last_12_hours_data.iloc[-1]['fecha']
         last_obs_value = last_12_hours_data.iloc[-1]['val']
 
+        time_series_fig.add_trace(
+            go.Scatter(x=last_12_hours_data['fecha'],
+                       y=last_12_hours_data['val'],
+                       mode='lines+markers',
+                       name=f'<b>Pasadas {num_hours_past} horas</b>',
+                       textfont=style_traces))
+
     else:
         print("El DataFrame con 24 horas previas está vacío, o hay un error")
+        last_obs_time = None
+        last_obs_value = None
 
     # %% #################################################
     # Data for the next 24 hours
@@ -239,6 +331,32 @@ def generate_layout(id_est='MER'):
     df_pred_bd = db_query_predhours(id_est, end_time_str)
 
     # Asegurar que el DataFrame no esté vacío antes de continuar
+    if df_pred_bd.empty:
+        layout = html.Div(
+    [
+
+        # El resto del layout
+        html.Div([
+            html.Div([
+                html.H3(
+                    f'''Estación {stations_dict[id_est]} a las {now_str[:-3]} hrs. No hay datos en dataframe''',
+                    style={
+                        'text-align': 'center',
+                        'font-family': 'Helvetica',  # 'Verdana',  # 'Palatino Linotype', #Cambia 'Arial' por la fuente que prefieras
+                        'font-size': '24px'
+                    }
+                ),
+
+                # ... Resto de los componentes del layout, dependiendo de si hay datos o no
+            ]),
+            # ... Más componentes del layout aquí
+        ]),
+        # ... Más componentes del layout aquí
+    ]
+)
+
+        return layout
+
     if not df_pred_bd.empty:
         # Convertir la columna 'fecha' a tipo datetime para df_pred_bd
         df_pred_bd['fecha'] = pd.to_datetime(df_pred_bd['fecha'])
@@ -253,10 +371,14 @@ def generate_layout(id_est='MER'):
 
         # prediction_intervals_phour como 1.96 sigma de gaussian fit
         # Ejemplo de uso
-        prediction_intervals = calculate_prediction_intervals(
+        # prediction_intervals = calculate_prediction_intervals(
+        #     values_pred, 'hour_p', id_est, results_errd_df, intervals)
+
+        prediction_intervals_plus, prediction_intervals_minus = calculate_prediction_intervals(
             values_pred, 'hour_p', id_est, results_errd_df, intervals)
-        print(prediction_intervals, len(prediction_intervals))
-        prediction_intervals_phour = prediction_intervals
+
+        # print(prediction_intervals, len(prediction_intervals))
+        # prediction_intervals_phour = prediction_intervals
     else:
         print("El DataFrame para las próximas 24 horas está vacío.")
 
@@ -267,62 +389,72 @@ def generate_layout(id_est='MER'):
         values_pred = [last_obs_value]
 
     # Adding standard deviation bands (Lower Bound) for next 24 hours
+    # quitando los valores negativos que no son posibles en la vida real
+    y_int_minus = (values_pred + prediction_intervals_minus)
+    y_int_minus = [x if x >= 0 else 0 for x in y_int_minus]
+
     time_series_fig.add_trace(
         go.Scatter(x=timestamps_pred,
-                   y=values_pred - prediction_intervals_phour,
+                   # y=values_pred - prediction_intervals_phour,
+                   y= y_int_minus,
                    fill=None,
                    mode='lines',
                    # 'rgba(16, 182, 232,0.4)',# (68, 68, 68, 0.3)',
                    line_color='rgba(160, 223, 242,0.45)',
                    showlegend=False))
 
+
+
     # Add dashed vertical line to indicate the last observation time
-    time_series_fig.add_shape(
-        go.layout.Shape(
-            type="line",
-            x0=last_obs_time,
-            x1=last_obs_time,
-            y0=10,
-            y1=150,  # max(max(last_12_hours_data['val']), max(next_24_levels)),
-            line=dict(color="blue", width=2, dash="dash"),
-            line_color='rgba(0, 0, 250,0.6)'
-        ))
+    if last_obs_time:
+        time_series_fig.add_shape(
+            go.layout.Shape(
+                type="line",
+                x0=last_obs_time,
+                x1=last_obs_time,
+                y0=10,
+                y1=150,  # max(max(last_12_hours_data['val']), max(next_24_levels)),
+                line=dict(color="blue", width=2, dash="dash"),
+                line_color='rgba(0, 0, 250,0.6)'
+            ))
 
-    # Add dashed horizontal line to indicate the 150 ppb threshold
-    time_series_fig.add_shape(
-        go.layout.Shape(
-            type="line",
-            x0=last_12_hours_data.iloc[0]['fecha'],  # Start time
-            x1=timestamps_pred[-1],  # End time
-            y0=150,  # Threshold level
-            y1=150,  # Threshold level
-            line=dict(color="red", width=2, dash="dash"),
-            line_color='rgba(250, 0, 0,0.6)'
-        ))
+        # Add dashed horizontal line to indicate the 150 ppb threshold
+        time_series_fig.add_shape(
+            go.layout.Shape(
+                type="line",
+                x0=last_12_hours_data.iloc[0]['fecha'],  # Start time
+                x1=timestamps_pred[-1],  # End time
+                y0=150,  # Threshold level
+                y1=150,  # Threshold level
+                line=dict(color="red", width=2, dash="dash"),
+                line_color='rgba(250, 0, 0,0.6)'
+            ))
 
-    # Add tick label
-    time_series_fig.add_annotation(
-        x=last_12_hours_data.iloc[0]['fecha'],
-        y=150 + num_hours_past,
-        xref="x",
-        yref="y",
-        text="Umbral_150",
-        showarrow=False,
-        font=dict(family="Courier New, monospace", size=16, color="red"),
-    )
+        # Add tick label
+        time_series_fig.add_annotation(
+            x=last_12_hours_data.iloc[0]['fecha'],
+            y=(150 - 40), #+ num_hours_past,
+            xref="x",
+            yref="y",
+            text="Umbral_150",
+            showarrow=False,
+            font=dict(family="Courier New, monospace", size=16, color="red"),
+            textangle=90  # Rotar el texto 90 grados
+        )
 
-    # Add tick label
-    time_series_fig.add_annotation(
-        x=last_obs_time,
-        y=0,
-        xref="x",
-        yref="y",
-        text="Última Obs.",
-        showarrow=False,
-        font=dict(family="Courier New, monospace", size=16, color="blue"),
-    )
+        # Add tick label
+        time_series_fig.add_annotation(
+            x=last_obs_time,
+            y=0,
+            xref="x",
+            yref="y",
+            text="Última Obs.",
+            showarrow=False,
+            font=dict(family="Courier New, monospace", size=16, color="blue"),
+        )
 
     time_series_fig.update_layout(
+        margin=dict(t=5, b=5, l=5, r=5),  # Reducir márgenes
         title='',
         # f'Niveles de Contaminantes: Pasadas {num_hours_past} horas y Pronóstico de 24 horas (Estación {id_est})',
         xaxis_title='Hora',
@@ -358,11 +490,15 @@ def generate_layout(id_est='MER'):
     )
 
     # # Updating the layout to include the station label
+    y_int_plus = (values_pred + prediction_intervals_plus)
+    y_int_plus = [x if x >= 0 else 0 for x in y_int_plus]
+
 
     # Adding prediction interval bands (Upper Bound) for next 24 hours
     time_series_fig.add_trace(
         go.Scatter(x=timestamps_pred,
-                   y=values_pred + prediction_intervals_phour,
+                   # y=values_pred + prediction_intervals_phour,
+                   y=y_int_plus, #values_pred + prediction_intervals_plus,
                    fill='tonexty',
                    # (16, 182, 232,0.4)', #rgba(68, 68, 68, 0.3)',
                    fillcolor='rgba(160, 223, 242,0.45)',
@@ -379,9 +515,11 @@ def generate_layout(id_est='MER'):
                    name='<b>Pronóstico</b>',  # ))
                    textfont=style_traces))
 
+    time_series_fig.update_yaxes(range=[0, None])
+
     time_series_fig.update_layout(legend=dict(
         x=0.5,  # Posición en el eje x
-        y=1.2,  # Posición en el eje y
+        y=1.3,  # Posición en el eje y
         xanchor='center',  # Anclaje en el eje x
         yanchor='top',  # Anclaje en el eje y
         bgcolor='rgba(255,255,255,0)'  # Fondo transparente
@@ -403,6 +541,8 @@ def generate_layout(id_est='MER'):
         # paper_bgcolor='rgba(240, 240, 240, 1)'  # Color gris claro para el fondo de la figura
     )
 
+
+
     if debug_version:
         time_series_fig.add_annotation(
             x=0.5,  # Posición en el eje x, en coordenadas relativas al gráfico (0-1)
@@ -423,10 +563,12 @@ def generate_layout(id_est='MER'):
 
     dial_figs = []
     labels = [
-        "Umbral de 150 ppb siguientes 24 hrs",
-        "Media > 50 ppb/8hrs en siguientes 24 hrs",
-        "Umbral de 90 ppb siguientes 24 hrs",
-        "Umbral de 120 ppb siguientes 24 hrs"
+        # "Media > 50 ppb/8hrs",#<br>en siguientes 24 hrs",
+        "Media de más de 50 ppb en 8hrs",
+        "Umbral de 90 ppb",# <br>siguientes 24 hrs",
+        "Umbral de 120 ppb",# <br>siguientes 24 hrs",
+        "Umbral de 150 ppb"# <br>siguientes 24 hrs"
+
     ]
 
     font_size = 15  # Tamaño de la fuente para el letrero en los diales
@@ -521,7 +663,7 @@ def generate_layout(id_est='MER'):
                     className='column'),
 
                 html.Div([
-                    html.H3('Probabilidad de superar umbrales',
+                    html.H3('Probabilidad P_hist de superar umbrales en siguientes 24 hrs.',
                             style={
                                 'text-align': 'center',
                                 'font-family':  'Helvetica',  # 'Verdana',  # 'Palatino Linotype'
@@ -535,31 +677,42 @@ def generate_layout(id_est='MER'):
                              'vertical-align': 'top'
                 },
                     className='column'),
-                html.Footer([
-                    html.P(
-                        [
-                            'Autores: Olmo Zavala Romero, osz09@fsu.edu, Pedro A. Segura Chávez, psegura@atmosfera.unam.mx, Pablo Camacho-Gonzalez,pablopcg1@ciencias.unam.mx, Jorge Zavala-Hidalgo, jzavala@atmosfera.unam.mx, Pavel Oropeza Alfaro, poropeza@atmosfera.unam.mx , Agustin R. Garcia, agustin@atmosfera.unam.mx'
-                        ],
-                        style={
-                            'text-align': 'left',
-                            'padding': '7px',
-                            # 'background-color': '#f1f1f1',
-                            'font-family': 'Arial'  # Helvetica'
-                        }),
-                    html.P(
-                        [
-                            'Referencia:  ',
-                            html.A(f'doi:XXXXXXX',
-                                   href='https://doi.org/XXXXXXX',
-                                   target='_blank')
-                        ],
-                        style={
-                            'text-align': 'left',
-                            'padding': '20px',
-                            # 'background-color': '#f1f1f1',
-                            'font-family': 'Helvetica'
-                        })
-                ]),
+html.Footer([
+    # html.P('Autores:', style={'font-weight': 'bold', 'font-family': 'Arial'}),
+    html.Div([
+        html.Span('Autores: ', style={'font-weight': 'bold', 'font-family': 'Arial','display': 'inline'}),
+        html.Span('Olmo Zavala Romero - ', style={'display': 'inline'}),
+        html.A('osz09@fsu.edu', href='mailto:osz09@fsu.edu', style={'display': 'inline'}),
+        html.Span(', ', style={'display': 'inline'}),
+
+        html.Span('Pedro A. Segura Chávez - ', style={'display': 'inline'}),
+        html.A('psegura@atmosfera.unam.mx', href='mailto:psegura@atmosfera.unam.mx', style={'display': 'inline'}),
+        html.Span(', ', style={'display': 'inline'}),
+
+        html.Span('Pablo Camacho-Gonzalez - ', style={'display': 'inline'}),
+        html.A('pablopcg1@ciencias.unam.mx', href='mailto:pablopcg1@ciencias.unam.mx', style={'display': 'inline'}),
+        html.Span(', ', style={'display': 'inline'}),
+
+        html.Span('Jorge Zavala-Hidalgo - ', style={'display': 'inline'}),
+        html.A('jzavala@atmosfera.unam.mx', href='mailto:jzavala@atmosfera.unam.mx', style={'display': 'inline'}),
+        html.Span(', ', style={'display': 'inline'}),
+
+        html.Span('Pavel Oropeza Alfaro - ', style={'display': 'inline'}),
+        html.A('poropeza@atmosfera.unam.mx', href='mailto:poropeza@atmosfera.unam.mx', style={'display': 'inline'}),
+        html.Span(', ', style={'display': 'inline'}),
+
+        html.Span('Rosario Romero-Centeno - ', style={'display': 'inline'}),
+        html.A('rosario@atmosfera.unam.mx', href='mailto:rosario@atmosfera.unam.mx', style={'display': 'inline'}),
+        html.Span(', ', style={'display': 'inline'}),
+
+        html.Span('Octavio Gomez-Ramos - ', style={'display': 'inline'}),
+        html.A('octavio@atmosfera.unam.mx', href='mailto:octavio@atmosfera.unam.mx', style={'display': 'inline'}),
+        
+        # Si hay más autores, continúa con el mismo patrón aquí
+        # ...
+    ], style={'text-align': 'left', 'padding': '7px', 'font-family': 'Arial'}),
+ ]),
+
                 # CSS in-line for responsive design
                 html.Div([
                     html.Script(type='text/javascript',
@@ -666,32 +819,49 @@ app.layout = html.Div(
         html.Div(id='page-content')  # Contenedor para el contenido generado dinámicamente
     ])
 
-
+##############################
 @app.callback(
     Output('page-content', 'children'),
     [Input('url', 'search'), Input('my-dropdown', 'value')],
-    [State('url', 'search')]
+    [State('page-content', 'children'), State('url', 'search')]
 )
-def update_content(url_search, dropdown_value, state_url_search):
+def update_content(url_search, dropdown_value, current_layout, state_url_search):
     ctx = callback_context
 
-    # Si el callback no fue disparado por ningún Input, usa un valor predeterminado
+    # Si no hay Input, no actualizar nada
     if not ctx.triggered:
-        return generate_layout('MER')  # Valor por defecto
+        raise PreventUpdate
 
     trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+
+    # Parsea la URL para obtener los parámetros
+    parsed_url = urlparse(url_search)
+    query_params = parse_qs(parsed_url.query)
+
+    # Usar valores predeterminados si no se proporciona ninguna fecha o id_est
+    default_id_est = 'MER'
+    default_fecha = datetime.now().replace(minute=0, second=0, microsecond=0).strftime('%Y-%m-%dT%H')
+
+    # Intenta obtener 'id_est' y 'fecha' de los parámetros de la URL o usa los valores predeterminados
+    id_est_from_url = query_params.get('id_est', [default_id_est])[0]
+    fecha_from_url = query_params.get('fecha', [default_fecha])[0]
 
     # Determina qué input disparó el callback
     if trigger_id == 'url':
         # Si el cambio proviene de la URL
-        id_est = url_search.split('=')[-1] if url_search else 'MER'
+        id_est = id_est_from_url
+        fecha = fecha_from_url
+    elif trigger_id == 'my-dropdown' and dropdown_value:
+        # Si el cambio proviene del dropdown, se usa el valor del dropdown y se conserva la fecha actual
+        id_est = dropdown_value
+        fecha = fecha_from_url  # Aquí se mantiene la fecha que ya estaba en la URL
     else:
-        # Si el cambio proviene del dropdown
-        id_est = dropdown_value if dropdown_value else state_url_search.split('=')[-1]
+        # Si no hay cambios o el valor del dropdown no es válido, se previene la actualización
+        raise PreventUpdate
 
-    return generate_layout(id_est)
-
+    # Llamar a la función generate_layout con los parámetros obtenidos
+    return generate_layout(id_est, fecha)
 
 # Ejecutar la aplicación
 if __name__ == '__main__':
-    app.run_server(debug=debug_version, host='0.0.0.0', port=8050)
+    app.run_server(debug=debug_version, host='0.0.0.0', port=8888) # port=8050)

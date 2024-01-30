@@ -1,4 +1,4 @@
-name: dash-operativo2
+name: dash-operativo
 channels:
   - conda-forge
 dependencies:
